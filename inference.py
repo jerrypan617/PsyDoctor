@@ -41,21 +41,14 @@ def format_conversation(messages):
 
 def generate_response(model, tokenizer, messages, max_length=1024, temperature=0.7):
     """生成回复"""
-    # 格式化输入
     input_text = format_conversation(messages)
-    
-    # 编码输入
     inputs = tokenizer(
         input_text,
         return_tensors="pt",
         truncation=True,
         max_length=max_length
     ).to(model.device)
-    
-    # 记录输入长度，用于后续截取
     input_length = inputs['input_ids'].shape[1]
-    
-    # 生成
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
@@ -66,34 +59,22 @@ def generate_response(model, tokenizer, messages, max_length=1024, temperature=0
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id
         )
-    
-    # 只解码新生成的部分（去掉输入部分）
     new_tokens = outputs[0][input_length:]
     response = tokenizer.decode(new_tokens, skip_special_tokens=True)
-    
-    # 清理响应，移除可能的特殊标记
     response = response.strip()
-    
-    # 移除开头的"assistant"标记（可能带换行）
     if response.startswith("assistant"):
-        # 找到第一个换行符的位置
         first_newline = response.find('\n')
         if first_newline != -1:
             response = response[first_newline + 1:].strip()
         else:
-            # 如果没有换行符，直接移除"assistant"
             response = response[8:].strip()
-    
-    # 移除结尾的<|im_end|>标记
     if response.endswith("<|im_end|>"):
         response = response[:-10].strip()
     
     return response
 
 def main():
-    # 加载模型
     model, tokenizer = load_model()
-    
     messages = [
         {
             "role": "system",
@@ -113,10 +94,10 @@ def main():
             response = generate_response(model, tokenizer, messages)
             print(response)
             messages.append({"role": "assistant", "content": response})
-            if len(messages) > 10:  # 最近10轮对话
+            if len(messages) > 10:
                 messages = messages[:1] + messages[-9:]
         except KeyboardInterrupt:
-            print("\n\n程序被中断，再见！")
+            print("\n\n程序被Ctrl+C中断，再见！")
             break
         except Exception as e:
             print(f"\n错误: {e}")

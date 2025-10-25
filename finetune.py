@@ -67,11 +67,11 @@ class TrainingArguments:
     logging_dir: str = "/root/tf-logs"
     run_name: str = "qwen2-lora-finetune"
     fp16: bool = True
-    gradient_checkpointing: bool = True  # 启用梯度检查点
-    optim: str = "paged_adamw_8bit"  # 使用8bit优化器
+    gradient_checkpointing: bool = True
+    optim: str = "paged_adamw_8bit"
     dataloader_pin_memory: bool = False
     remove_unused_columns: bool = False
-    max_grad_norm: float = 1.0  # 梯度裁剪
+    max_grad_norm: float = 1.0
 
 @dataclass
 class LoRAArguments:
@@ -98,10 +98,7 @@ class MultiTurnDataset(Dataset):
         item = self.data[idx]
         messages = item["messages"]
         
-        # 构建对话文本
         text = self._format_conversation(messages)
-        
-        # 编码
         encoding = self.tokenizer(
             text,
             truncation=True,
@@ -146,10 +143,7 @@ class DataCollatorForCausalLM:
         self.pad_to_multiple_of = pad_to_multiple_of
         
     def __call__(self, features):
-        # 获取batch中的最大长度
         max_length = max(len(f["input_ids"]) for f in features)
-        
-        # 如果指定了pad_to_multiple_of，调整max_length
         if self.pad_to_multiple_of is not None:
             max_length = (
                 (max_length + self.pad_to_multiple_of - 1)
@@ -194,11 +188,7 @@ def load_data(data_path: str, train_val_split: float = 0.9):
         data = json.load(f)
     
     print(f"Total samples: {len(data)}")
-    
-    # 随机打乱数据
     random.shuffle(data)
-    
-    # 划分训练集和验证集
     split_idx = int(len(data) * train_val_split)
     train_data = data[:split_idx]
     val_data = data[split_idx:]
@@ -227,10 +217,7 @@ def setup_lora_model(model, lora_args: LoRAArguments):
 def compute_metrics(eval_preds):
     """计算评估指标"""
     predictions, labels = eval_preds
-    # 忽略-100的标签
     predictions = np.argmax(predictions, axis=-1)
-    
-    # 只计算非-100标签的准确率
     mask = labels != -100
     predictions = predictions[mask]
     labels = labels[mask]
@@ -242,45 +229,36 @@ def compute_metrics(eval_preds):
     }
 
 class LoRATrainer(Trainer):
-    """自定义Trainer，只保存LoRA适配器"""
+    """自定义Trainer: 只保存LoRA适配器"""
     
     def save_model(self, output_dir=None, _internal_call=False):
-        """重写保存方法，只保存LoRA适配器"""
+        """只保存LoRA适配器"""
         if output_dir is None:
             output_dir = self.args.output_dir
-        
-        # 只保存LoRA适配器
         if hasattr(self.model, 'save_pretrained'):
             lora_path = os.path.join(output_dir, "lora_adapter")
             os.makedirs(lora_path, exist_ok=True)
             self.model.save_pretrained(lora_path)
-            
-            # 保存LoRA配置
             if hasattr(self.model, 'peft_config'):
                 lora_config = self.model.peft_config
                 with open(os.path.join(lora_path, "lora_config.json"), "w") as f:
                     json.dump(lora_config, f, indent=2)
-            
             print(f"LoRA adapter saved to {lora_path}")
         else:
             print("Model does not have save_pretrained method")
 
 def main():
     set_seed(42)
-    
     model_args = ModelArguments()
     data_args = DataArguments()
     training_args = TrainingArguments()
     lora_args = LoRAArguments()
-    
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
-    
     os.makedirs(training_args.output_dir, exist_ok=True)
     os.makedirs(training_args.logging_dir, exist_ok=True)
     logger.info(f"TensorBoard logs will be saved to: {training_args.logging_dir}")
     logger.info(f"To view logs, run: tensorboard --logdir={training_args.logging_dir}")
-    
     logger.info("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
@@ -289,10 +267,8 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=model_args.use_auth_token,
     )
-    
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    
     logger.info("Loading model...")
     model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
@@ -302,17 +278,13 @@ def main():
         dtype=torch.bfloat16,
         device_map="auto"
     )
-    
     if training_args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
         logger.info("Gradient checkpointing enabled")
-    
     logger.info("Setting up LoRA...")
     model = setup_lora_model(model, lora_args)
-    
     logger.info("Loading data...")
     train_data, val_data = load_data(data_args.data_path, data_args.train_val_split)
-    
     train_dataset = MultiTurnDataset(train_data, tokenizer, data_args.max_seq_length)
     val_dataset = MultiTurnDataset(val_data, tokenizer, data_args.max_seq_length)
     
@@ -321,7 +293,6 @@ def main():
         pad_to_multiple_of=8
     )
     
-    # 训练参数
     from transformers import TrainingArguments as HFTrainingArguments
     
     hf_training_args = HFTrainingArguments(
@@ -351,10 +322,8 @@ def main():
         max_grad_norm=training_args.max_grad_norm,
         dataloader_pin_memory=training_args.dataloader_pin_memory,
         remove_unused_columns=training_args.remove_unused_columns,
-        eval_accumulation_steps=4,  # 评估时也使用梯度累积
+        eval_accumulation_steps=4,
     )
-    
-    # 创建训练器
     trainer = LoRATrainer(
         model=model,
         args=hf_training_args,
@@ -374,7 +343,6 @@ def main():
         json.dump(lora_config, f, indent=2)
     
     logger.info("Training completed!")
-    logger.info(f"View training logs with: tensorboard --logdir={training_args.logging_dir}")
 
 if __name__ == "__main__":
     main()
