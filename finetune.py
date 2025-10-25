@@ -29,7 +29,7 @@ def set_seed(seed=42):
 @dataclass
 class ModelArguments:
     """模型相关参数"""
-    model_name_or_path: str = "/root/autodl-tmp/bs/models"
+    model_name_or_path: str = "base_model"
     cache_dir: Optional[str] = None
     use_fast_tokenizer: bool = True
     model_revision: str = "main"
@@ -38,7 +38,7 @@ class ModelArguments:
 @dataclass
 class DataArguments:
     """数据相关参数"""
-    data_path: str = "/root/autodl-tmp/bs/datas/PsyDTCorpus_train_mulit_turn_packing.json"
+    data_path: str = "datas/PsyDTCorpus_train_mulit_turn_packing.json"
     max_seq_length: int = 2048
     preprocessing_num_workers: int = 4
     train_val_split: float = 0.9
@@ -46,7 +46,7 @@ class DataArguments:
 @dataclass
 class TrainingArguments:
     """训练相关参数"""
-    output_dir: str = "/root/autodl-tmp/bs/output"
+    output_dir: str = "output"
     num_train_epochs: int = 3
     per_device_train_batch_size: int = 1
     per_device_eval_batch_size: int = 1
@@ -64,7 +64,7 @@ class TrainingArguments:
     metric_for_best_model: str = "eval_loss"
     greater_is_better: bool = False
     report_to: str = "tensorboard"
-    logging_dir: str = "/root/tf-logs"
+    logging_dir: str = "tf-logs"
     run_name: str = "qwen2-lora-finetune"
     fp16: bool = True
     gradient_checkpointing: bool = True
@@ -104,13 +104,12 @@ class MultiTurnDataset(Dataset):
             truncation=True,
             max_length=self.max_length,
             padding=False,
-            return_tensors=None  # 不返回tensor，返回list
+            return_tensors=None
         )
         
         input_ids = encoding["input_ids"]
         attention_mask = encoding["attention_mask"]
         
-        # 标签与输入相同
         labels = input_ids.copy()
         
         return {

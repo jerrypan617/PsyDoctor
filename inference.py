@@ -6,19 +6,47 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 import json
 
+# 检测可用的设备
+def get_device():
+    if torch.backends.mps.is_available():
+        return "mps"
+    elif torch.cuda.is_available():
+        return "cuda"
+    else:
+        return "cpu"
+
+device = get_device()
+print(f"使用设备: {device}")
+
 def load_model():
     print("加载基模型...")
+    # 根据设备类型设置设备映射
+    if device == "mps":
+        device_map = {"": "mps"}
+    elif device == "cuda":
+        device_map = "auto"
+    else:
+        device_map = {"": "cpu"}
+    
     base_model = AutoModelForCausalLM.from_pretrained(
-        "models",
+        "Qwen/Qwen2.5-1.5B-Instruct",
         dtype=torch.bfloat16,
-        device_map="auto"
+        device_map=device_map,
+        cache_dir="base_model"
     )
     
     print("加载tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained("/root/autodl-tmp/bs/output")
+    tokenizer = AutoTokenizer.from_pretrained("./output")
     
     print("加载LoRA适配器...")
-    model = PeftModel.from_pretrained(base_model, "/root/autodl-tmp/bs/output/lora_adapter")
+    model = PeftModel.from_pretrained(base_model, "./output/lora_adapter")
+    
+    if device == "mps":
+        model = model.to("mps")
+    elif device == "cuda":
+        model = model.to("cuda")
+    else:
+        model = model.to("cpu")
     
     print("模型加载成功。")
     return model, tokenizer
@@ -47,7 +75,15 @@ def generate_response(model, tokenizer, messages, max_length=1024, temperature=0
         return_tensors="pt",
         truncation=True,
         max_length=max_length
-    ).to(model.device)
+    )
+    
+    # 将输入移动到正确的设备
+    if device == "mps":
+        inputs = {k: v.to("mps") for k, v in inputs.items()}
+    elif device == "cuda":
+        inputs = {k: v.to("cuda") for k, v in inputs.items()}
+    else:
+        inputs = {k: v.to("cpu") for k, v in inputs.items()}
     input_length = inputs['input_ids'].shape[1]
     with torch.no_grad():
         outputs = model.generate(

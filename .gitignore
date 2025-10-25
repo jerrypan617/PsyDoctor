@@ -151,7 +151,7 @@ tensorboard_logs/
 tf-logs/
 
 # Data files
-data/
+datas/
 datasets/
 *.csv
 *.json
@@ -161,8 +161,7 @@ datasets/
 *.arrow
 
 # Large model files (uncomment if you have large models)
-# models/
-# *.model
+base_model/
 
 # Jupyter notebook outputs
 *.ipynb
@@ -217,3 +216,6 @@ mlruns/
 config.local.json
 secrets.json
 .env.local
+
+# Logs
+logs/
