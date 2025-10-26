@@ -1,4 +1,4 @@
-# PsyDoctor
+# PsyDoctor-Server
 
 ## Weights
 
